@@ -1,14 +1,10 @@
 // Databricks notebook source
 // importing relevant libs
 // From here - Model preparation
-import java.time._
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.ml.{Pipeline, PipelineModel}
 import ml.dmlc.xgboost4j.scala.spark.XGBoostRegressor
-import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.joda.time.DateTime
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.evaluation.Evaluator
 
@@ -16,6 +12,10 @@ import org.apache.spark.ml.evaluation.Evaluator
 
 // load data (features only)
 val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/daniel/meetup-data/")
+
+// COMMAND ----------
+
+boston_housing_dataset.repartition(1).write.format("com.databricks.spark.csv").option("header", true).mode("overwrite").save("/mnt/S3/prod-parquet/product/daniel/meetup-data-csv/data.csv")
 
 // COMMAND ----------
 
@@ -123,6 +123,6 @@ val eval = evaluator.evaluate(updatedAfterModel)
 
 // COMMAND ----------
 
-// DBTITLE 1,SQL-Spark API on a DataFrame
+// DBTITLE 1,SQL-Spark API on a whole DataFrame
 // MAGIC %sql
 // MAGIC SELECT * FROM updatedAfterModel
