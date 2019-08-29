@@ -4,7 +4,7 @@
 import org.apache.spark.ml.feature.VectorAssembler
 import ml.dmlc.xgboost4j.scala.spark.XGBoostRegressor
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.evaluation.Evaluator
 
@@ -15,16 +15,12 @@ val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/danie
 
 // COMMAND ----------
 
-boston_housing_dataset.repartition(1).write.format("com.databricks.spark.csv").option("header", true).mode("overwrite").save("/mnt/S3/prod-parquet/product/daniel/meetup-data-csv/data.csv")
-
-// COMMAND ----------
-
 // MAGIC %md
-// MAGIC **Dataset Description**
+// MAGIC ** Boston Dataset Description **
 // MAGIC 
-// MAGIC **The Boston data frame has 506 rows and 14 columns**.
+// MAGIC ***The dataframe has 506 rows and 14 columns, alongside the following columns:***
 // MAGIC 
-// MAGIC This dataset contains the following columns:
+// MAGIC <br>
 // MAGIC 
 // MAGIC * **crim** - per capita crime rate by town.
 // MAGIC * **zn** - proportion of residential land zoned for lots over 25,000 sq.ft.
