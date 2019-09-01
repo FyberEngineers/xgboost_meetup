@@ -19,9 +19,5 @@ This repository contains the Databricks notebook and the relevant DataFrame, whi
 
 ## Authors
 
-* **Michael Winer** - - [Linkedin](https://www.linkedin.com/in/michael-winer-94363569/)
-* **Daniel Hen** - - [Linkedin](https://www.linkedin.com/in/daniel-hen/)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+* **Michael Winer** - [Linkedin](https://www.linkedin.com/in/michael-winer-94363569/)
+* **Daniel Hen** - [Linkedin](https://www.linkedin.com/in/daniel-hen/)
