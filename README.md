@@ -1,40 +1,20 @@
 # Fyber XGBoost Meetup
 This is the code that was presented during Fyber's XGBoost Meetup, September 23rd, 2019.
 
-## Getting Started
+## What's in here?
 
-The data within this repo is boston housing dataset (a very known dataset), and in addition, some valuable columns that helps for the tutorial.
+This repository contains the Databricks notebook and the relevant DataFrame, which was used during the code session as part of the meetup.
 
+## Covered Topics
 
-```
-
-And repeat
-
-```
-until finished
-```
-
-End with an example of getting some data out of the system or using it for a little demo
-
-## Running the tests
-
-Explain how to run the automated tests for this system
-
-### Break down into end to end tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
-
-### And coding style tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
+* Spark Data loading
+* DataFrame overview
+* Spark ML Pipeline (which includes: StringIndexer, OneHotEncoder, VectorAssembler, ML Model)
+* XGBoost Spark Instantiation
+* ML Model Transform following training
+* Model Evaluation
+* MLeap (Model Export / Import framework) usage
+* Spark-SQL API
 
 ## Deployment
 
