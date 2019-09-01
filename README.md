@@ -11,11 +11,11 @@ This repository contains the Databricks notebook and the relevant DataFrame, whi
 * DataFrame overview
 * Spark ML Pipeline (which includes: StringIndexer, OneHotEncoder, VectorAssembler, ML Model)
 * XGBoost Spark Instantiation
-* ML Model Train & Transform (like ".fit" & ".predict").
+* ML Model Train & Transform (like ".fit" & ".predict")
+* Feature Importance (not default like in Python)
 * Model Evaluation
 * MLeap (Model Export / Import framework) usage
 * Spark-SQL API
-
 
 ## Authors
 
