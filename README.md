@@ -1,6 +1,5 @@
-# Project Title
-
-One Paragraph of project description goes here
+# Fyber XGBoost Meetup
+This is the code that was presented during Fyber's XGBoost Meetup, September 23rd, 2019.
 
 ## Getting Started
 
