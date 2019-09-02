@@ -122,7 +122,62 @@ val trainedModel = pipeline.fit(trainingData)
 
 // COMMAND ----------
 
-// DBTITLE 1,Transform the Test Data (same as ".predict")
+// DBTITLE 1,Model Saving using MLeap
+// this transform is solely for model saving - not used for evaluation !
+val updatedDfTrainedAfterModel = trainedModel.transform(trainingData)
+
+// COMMAND ----------
+
+// DBTITLE 1,Making an empty directory for the model
+// MAGIC %sh
+// MAGIC rm -rf /tmp/mleap_xgboost_meetup/
+// MAGIC mkdir /tmp/mleap_xgboost_meetup/
+
+// COMMAND ----------
+
+// DBTITLE 1,Save Model
+// Save model
+import ml.combust.bundle.BundleFile
+import ml.combust.mleap.spark.SparkSupport._
+import org.apache.spark.ml.bundle.SparkBundleContext
+import ml.combust.mleap.runtime.MleapSupport._
+import resource._
+
+implicit val context = SparkBundleContext().withDataset(updatedDfTrainedAfterModel)
+
+// COMMAND ----------
+
+// DBTITLE 1,Serialize Pipeline to Directory
+(for(modelFile <- managed(BundleFile("file:/tmp/mleap_xgboost_meetup"))) yield {
+  trainedModel.writeBundle.save(modelFile)(context)
+}).tried.get
+
+// COMMAND ----------
+
+// DBTITLE 1,Save the file in S3
+dbutils.fs.cp("file:/tmp/mleap_xgboost_meetup/", s"/mnt/S3/prod-parquet/product/daniel/xgboost-meetup/model", recurse=true)
+// of course, for version management, we can add some timestamp in the format of /day=yyyy-MM-dd/hour=HH, just to make our life easier
+
+// COMMAND ----------
+
+// DBTITLE 1,(Optional) Load the model after saved it
+val dirBundle = (for(bundle <- managed(BundleFile("file:/tmp/mleap_xgboost_meetup"))) yield {
+  bundle.loadSparkBundle().get
+}).opt.get
+
+// COMMAND ----------
+
+// DBTITLE 1,Get our ML pipeline out of it
+val relevantPipeline = dirBundle.root
+
+// COMMAND ----------
+
+// DBTITLE 1,And make predictions (this can be expanded to REST API services, batch inference, etc.)
+val predDf = relevantPipeline.transform(testData)
+
+// COMMAND ----------
+
+// DBTITLE 1,Getting back to the normal flow. Using the "trainedModel" in order to transform the Test Data (i.e. ".predict")
 //transform on test data
 val updatedAfterModel = trainedModel.transform(testData)
 
@@ -157,3 +212,68 @@ val eval = evaluator.evaluate(updatedAfterModel)
 // MAGIC -- 1: 13 - this is the size of the feature vector row
 // MAGIC -- 2: The indices of the Sparse representation - meaning which features are non-zero in a Sparse representation (thus will always be empty in Dense repersentation)
 // MAGIC -- 3: the actual values
+
+// COMMAND ----------
+
+// DBTITLE 1,Feature Importance
+// Feature importance is not that easy in XGBoost4J (the Spark version)
+// In order to get it, one should dive into the low-level APIs of the model, and get the relevant method out of it, then join the scores with the column names
+
+// getting the low-level API of xgboostRegressionModel in order to get the features and feature scores
+
+// 1. get the model out of it
+val model = trainedModel.stages(3).asInstanceOf[ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel]
+
+// 2. get the nativeBooster in order to call the feature score getter
+val modelNativeForFeatureImportance = model.nativeBooster
+
+// 3. feature score getter
+val featureScore = modelNativeForFeatureImportance.getFeatureScore()
+
+val featureScoreDf = featureScore.toSeq.toDF("feature", "score")
+
+// a lot of features are derived from a sparse vector, therefore not that helping the model, but are essential to it.
+val filteredFeatureScore = featureScoreDf
+
+// COMMAND ----------
+
+// create a list of all relevant features 
+val listOfColsForFeatureImportance = updatedAfterModel.drop("label",
+                               "dummyString",
+                               "dummyString_indexed",
+                               "features",
+                               "prediction").columns.toSeq
+
+// COMMAND ----------
+
+//val map = Map(listOfColsForFeatureImportance map { a => a.key -> a }: _*)
+val mapOfCols = listOfColsForFeatureImportance.map(t => t.toString() -> ("f"))
+var colsFinalMap = scala.collection.mutable.Map[String, String]()
+
+var i = 0
+for ((k,v) <- mapOfCols){
+  val updatedStr = v + i.toString
+  colsFinalMap += (k -> updatedStr)
+  i += 1
+}
+
+// COMMAND ----------
+
+val scoredDfFeatures = filteredFeatureScore.sort("feature")
+scoredDfFeatures.createOrReplaceTempView("scoreDf")
+
+val mapDf = colsFinalMap.toSeq.toDF("Feature", "FeatureID")
+
+mapDf.createOrReplaceTempView("mapDf")
+
+// COMMAND ----------
+
+// MAGIC %sql
+// MAGIC SELECT a.Feature, b.score FROM
+// MAGIC mapDf a
+// MAGIC INNER JOIN scoreDf b
+// MAGIC ON a.FeatureID = b.feature
+// MAGIC ORDER BY b.score DESC
+
+// COMMAND ----------
+
