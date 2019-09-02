@@ -1,12 +1,16 @@
 // Databricks notebook source
 // importing relevant libs
 // From here - Model preparation
+import java.time._
 import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.{Pipeline, PipelineModel}
 import ml.dmlc.xgboost4j.scala.spark.XGBoostRegressor
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.feature.OneHotEncoderEstimator
+import org.joda.time.DateTime
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.ml.evaluation.Evaluator
 
 // COMMAND ----------
 
@@ -21,7 +25,6 @@ val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/danie
 // MAGIC ***The dataframe has 506 rows and 14 columns, alongside the following columns:***
 // MAGIC 
 // MAGIC <br>
-// MAGIC 
 // MAGIC * **crim** - per capita crime rate by town.
 // MAGIC * **zn** - proportion of residential land zoned for lots over 25,000 sq.ft.
 // MAGIC * **indus** - proportion of non-retail business acres per town.
@@ -44,14 +47,38 @@ display(boston_housing_dataset.describe())
 
 // COMMAND ----------
 
+import org.apache.spark.sql.functions._
+val boston_housing_dataset_dummy = boston_housing_dataset.withColumn("dummyString", concat(lit("dummy"),round(rand(seed=42)*10,0)))
+                                                         .withColumn("dummyInt",round(rand(seed=10),2))
+
+// COMMAND ----------
+
+display(boston_housing_dataset_dummy)
+
+// COMMAND ----------
+
 // DBTITLE 1,Train Test Split
-val Array(trainingData, testData) = boston_housing_dataset.withColumnRenamed("PRICE", "label")
-                                                          .randomSplit(Array(0.8, 0.2))
+val Array(trainingData, testData) = boston_housing_dataset_dummy.withColumnRenamed("PRICE", "label").randomSplit(Array(0.8, 0.2))
+
+// COMMAND ----------
+
+// DBTITLE 1,String Indexer on String Categorical Columns
+val dummyIndexer = new StringIndexer()
+  .setInputCol("dummyString")
+  .setOutputCol("dummyString_indexed")
+  .setHandleInvalid("keep")
+
+// COMMAND ----------
+
+val dummyOneHotEncoded = new OneHotEncoderEstimator()
+  .setInputCols(Array("dummyString_indexed"))
+  .setOutputCols(Array("dummyString_oneHotEncoded"))
 
 // COMMAND ----------
 
 // DBTITLE 1,Get an Array of all column names (for vectorAssembler)
-val relevantModelColumns = trainingData.drop("label").columns
+// note - added manipulated column as well.
+val relevantModelColumns = (trainingData.drop("label", "dummyString").columns) ++  Array("dummyString_oneHotEncoded")
 
 // COMMAND ----------
 
@@ -81,9 +108,11 @@ val xgboostRegressor = new XGBoostRegressor(Map[String, Any](
 
 // COMMAND ----------
 
-// DBTITLE 1,Create Pipeline of phases - 1. VectorAssembler -> 2. XGBoostRegressor
+// DBTITLE 1,Create Pipeline of phases - 1. StringIndexer, 2. OneHotEncoding, 3. VectorAssembler, 4. XGBoostRegressor
 val pipeline = new Pipeline()
-      .setStages(Array(assembler, 
+      .setStages(Array(dummyIndexer, 
+                       dummyOneHotEncoded,
+                       assembler, 
                        xgboostRegressor))
 
 // COMMAND ----------
@@ -114,11 +143,17 @@ val eval = evaluator.evaluate(updatedAfterModel)
 
 // DBTITLE 1,SQL-Spark API on a DataFrame
 // MAGIC %sql
-// MAGIC SELECT label, prediction, ROUND(ABS(label - prediction), 4) absolute_diff FROM updatedAfterModel
+// MAGIC SELECT label, prediction, ROUND(ABS(label - prediction), 4) absolute_diff 
+// MAGIC FROM updatedAfterModel
 // MAGIC ORDER BY absolute_diff ASC
 
 // COMMAND ----------
 
-// DBTITLE 1,SQL-Spark API on a whole DataFrame
+// DBTITLE 1,SQL-Spark API on a whole DataFrame (foucsing on features column) 
 // MAGIC %sql
 // MAGIC SELECT * FROM updatedAfterModel
+// MAGIC -- features
+// MAGIC -- 0: 1 - this is the first index that says it is a Dense Representation (more non-zero than zero elements - done automatically by spark); 0 - Sparse Representation
+// MAGIC -- 1: 13 - this is the size of the feature vector row
+// MAGIC -- 2: The indices of the Sparse representation - meaning which features are non-zero in a Sparse representation (thus will always be empty in Dense repersentation)
+// MAGIC -- 3: the actual values
