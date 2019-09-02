@@ -11,6 +11,7 @@ This repository contains the Databricks notebook and the relevant DataFrame, whi
 * DataFrame overview + Basic EDA
 * Spark ML Pipeline (which includes: StringIndexer, OneHotEncoder, VectorAssembler, ML Model)
 * XGBoost Spark Instantiation
+* Handling Missing Data in XGBoost
 * ML Model Train & Transform (like ".fit" & ".predict")
 * Feature Importance (not default like in Python)
 * Model Evaluation
