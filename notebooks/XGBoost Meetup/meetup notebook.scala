@@ -57,8 +57,33 @@ display(boston_housing_dataset_dummy)
 
 // COMMAND ----------
 
+// DBTITLE 1,Add missing data to the Dataframe and handle it in XGBoost
+val boston_housing_dataset_dummy = boston_housing_dataset.withColumn("dummyString", concat(lit("dummy"),round(rand(seed=42)*10,0)))
+                                                         .withColumn("dummyInt",round(rand(seed=10),2))
+
+// COMMAND ----------
+
+val boston_with_dummy_and_missing = boston_housing_dataset_dummy.withColumn("LSTAT_MISSING", when(col("LSTAT") <= 5, null).otherwise(col("LSTAT"))).drop("LSTAT").withColumnRenamed("LSTAT_MISSING", "LSTAT")
+
+
+//  when(col("CURRENCY") === lit("USD"), col("PREMIUM") * col("RATE"))
+//     .otherwise(col("PREMIUM"))
+
+// COMMAND ----------
+
+display(boston_with_dummy_and_missing)
+
+// COMMAND ----------
+
+// DBTITLE 1,Handling missing values. make sure to put a dummy value on them (-99.0 on this case)
+// Replace null values with a missing value -99.0 as the relevant cols that have missing columns are all double
+val replacedValuesDf = boston_with_dummy_and_missing.na.fill(-99.0)
+// val finalDf = descDf.describe()
+
+// COMMAND ----------
+
 // DBTITLE 1,Train Test Split
-val Array(trainingData, testData) = boston_housing_dataset_dummy.withColumnRenamed("PRICE", "label").randomSplit(Array(0.8, 0.2))
+val Array(trainingData, testData) = replacedValuesDf.withColumnRenamed("PRICE", "label").randomSplit(Array(0.8, 0.2))
 
 // COMMAND ----------
 
@@ -90,9 +115,10 @@ val assembler = new VectorAssembler()
 
 // COMMAND ----------
 
-// DBTITLE 1,XGBoost Regressor (with objective reg:linear) instantiation, as it's a regression task
+// DBTITLE 1,XGBoost Regressor (with objective reg:linear) instantiation, as it's a regression task. Note: missing flag = -99.0
 val xgboostRegressor = new XGBoostRegressor(Map[String, Any](
   "num_round" -> 80,
+  "missing" -> -99.0,
   "num_workers" -> 5,  //Distributed training
   "objective" -> "reg:linear",
   "eta" -> 0.1, // learning rate
@@ -274,6 +300,3 @@ mapDf.createOrReplaceTempView("mapDf")
 // MAGIC INNER JOIN scoreDf b
 // MAGIC ON a.FeatureID = b.feature
 // MAGIC ORDER BY b.score DESC
-
-// COMMAND ----------
-
