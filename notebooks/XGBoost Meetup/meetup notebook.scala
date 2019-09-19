@@ -11,6 +11,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.feature.OneHotEncoderEstimator
 import org.joda.time.DateTime
 import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.sql.functions._
 
 // COMMAND ----------
 
@@ -47,7 +48,7 @@ display(boston_housing_dataset.describe())
 
 // COMMAND ----------
 
-import org.apache.spark.sql.functions._
+// DBTITLE 1,Add missing data to the Dataframe and handle it in XGBoost
 val boston_housing_dataset_dummy = boston_housing_dataset.withColumn("dummyString", concat(lit("dummy"),round(rand(seed=42)*10,0)))
                                                          .withColumn("dummyInt",round(rand(seed=10),2))
 
@@ -57,17 +58,7 @@ display(boston_housing_dataset_dummy)
 
 // COMMAND ----------
 
-// DBTITLE 1,Add missing data to the Dataframe and handle it in XGBoost
-val boston_housing_dataset_dummy = boston_housing_dataset.withColumn("dummyString", concat(lit("dummy"),round(rand(seed=42)*10,0)))
-                                                         .withColumn("dummyInt",round(rand(seed=10),2))
-
-// COMMAND ----------
-
 val boston_with_dummy_and_missing = boston_housing_dataset_dummy.withColumn("LSTAT_MISSING", when(col("LSTAT") <= 5, null).otherwise(col("LSTAT"))).drop("LSTAT").withColumnRenamed("LSTAT_MISSING", "LSTAT")
-
-
-//  when(col("CURRENCY") === lit("USD"), col("PREMIUM") * col("RATE"))
-//     .otherwise(col("PREMIUM"))
 
 // COMMAND ----------
 
@@ -95,6 +86,7 @@ val dummyIndexer = new StringIndexer()
 
 // COMMAND ----------
 
+// DBTITLE 1,oneHotEncoding on categorical data
 val dummyOneHotEncoded = new OneHotEncoderEstimator()
   .setInputCols(Array("dummyString_indexed"))
   .setOutputCols(Array("dummyString_oneHotEncoded"))
@@ -122,9 +114,7 @@ val xgboostRegressor = new XGBoostRegressor(Map[String, Any](
   "num_workers" -> 5,  //Distributed training
   "objective" -> "reg:linear",
   "eta" -> 0.1, // learning rate
-  "gamma" -> 0.5,
-  "max_depth" -> 6, 
-  "early_stopping_rounds" -> 9,
+  "max_depth" -> 6,
   "seed" -> 1234, // for "holding" random results
   "lambda" -> 0.4,
   "alpha" -> 0.3,
@@ -295,7 +285,8 @@ mapDf.createOrReplaceTempView("mapDf")
 // COMMAND ----------
 
 // MAGIC %sql
-// MAGIC SELECT a.Feature, b.score FROM
+// MAGIC SELECT a.Feature, b.score 
+// MAGIC FROM
 // MAGIC mapDf a
 // MAGIC INNER JOIN scoreDf b
 // MAGIC ON a.FeatureID = b.feature
