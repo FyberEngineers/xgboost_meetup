@@ -138,7 +138,7 @@ val trainedModel = pipeline.fit(trainingData)
 
 // COMMAND ----------
 
-// DBTITLE 1,Model Saving using MLeap
+// DBTITLE 1,Model Saving using MLeap (https://mleap-docs.combust.ml/getting-started/spark.html)
 // this transform is solely for model saving - not used for evaluation !
 val updatedDfTrainedAfterModel = trainedModel.transform(trainingData)
 
