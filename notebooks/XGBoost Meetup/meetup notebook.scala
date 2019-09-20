@@ -1,17 +1,25 @@
 // Databricks notebook source
-// importing relevant libs
-// From here - Model preparation
-import java.time._
-import org.apache.spark.ml.feature.VectorAssembler
+// importing relevant libs & functions
+// ML imports
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.feature.OneHotEncoderEstimator
+import org.apache.spark.ml.feature.VectorAssembler
 import ml.dmlc.xgboost4j.scala.spark.XGBoostRegressor
+import org.apache.spark.ml.Pipeline
+// used for model evaluation
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+
+// Data imports & manipulation
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.ml.feature.OneHotEncoderEstimator
-import org.joda.time.DateTime
-import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.sql.functions._
+
+// MLeap model saving
+import ml.combust.bundle.BundleFile
+import ml.combust.mleap.spark.SparkSupport._
+import org.apache.spark.ml.bundle.SparkBundleContext
+import ml.combust.mleap.runtime.MleapSupport._
+import resource._
 
 // COMMAND ----------
 
@@ -21,9 +29,9 @@ val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/danie
 // COMMAND ----------
 
 // MAGIC %md
-// MAGIC ** Boston Dataset Description **
+// MAGIC ** Boston Housing Dataset Description **
 // MAGIC 
-// MAGIC ***The dataframe has 506 rows and 14 columns, alongside the following columns:***
+// MAGIC ***The dataframe has 506 rows and 14 columns, in which below you can find a description about those:***
 // MAGIC 
 // MAGIC <br>
 // MAGIC * **crim** - per capita crime rate by town.
@@ -48,7 +56,7 @@ display(boston_housing_dataset.describe())
 
 // COMMAND ----------
 
-// DBTITLE 1,Add missing data to the Dataframe and handle it in XGBoost
+// DBTITLE 1,Add Dummy columns (both string and Int columns) to data
 val boston_housing_dataset_dummy = boston_housing_dataset.withColumn("dummyString", concat(lit("dummy"),round(rand(seed=42)*10,0)))
                                                          .withColumn("dummyInt",round(rand(seed=10),2))
 
@@ -58,7 +66,10 @@ display(boston_housing_dataset_dummy)
 
 // COMMAND ----------
 
-val boston_with_dummy_and_missing = boston_housing_dataset_dummy.withColumn("LSTAT_MISSING", when(col("LSTAT") <= 5, null).otherwise(col("LSTAT"))).drop("LSTAT").withColumnRenamed("LSTAT_MISSING", "LSTAT")
+// DBTITLE 1,Add missing data to the Dataframe and handle it in XGBoost
+val boston_with_dummy_and_missing = boston_housing_dataset_dummy.withColumn("LSTAT_MISSING", when(col("LSTAT") <= 5, null).otherwise(col("LSTAT")))
+                                                                .drop("LSTAT")
+                                                                .withColumnRenamed("LSTAT_MISSING", "LSTAT")
 
 // COMMAND ----------
 
@@ -73,16 +84,21 @@ val replacedValuesDf = boston_with_dummy_and_missing.na.fill(-99.0)
 
 // COMMAND ----------
 
-// DBTITLE 1,Train Test Split
-val Array(trainingData, testData) = replacedValuesDf.withColumnRenamed("PRICE", "label").randomSplit(Array(0.8, 0.2))
+display(replacedValuesDf)
 
 // COMMAND ----------
 
-// DBTITLE 1,String Indexer on String Categorical Columns
+// DBTITLE 1,Train Test Split
+val Array(trainingData, testData) = replacedValuesDf.withColumnRenamed("PRICE", "label")
+                                                    .randomSplit(Array(0.8, 0.2))
+
+// COMMAND ----------
+
+// DBTITLE 1,String Indexer on String Categorical Columns (dummyString)
 val dummyIndexer = new StringIndexer()
   .setInputCol("dummyString")
   .setOutputCol("dummyString_indexed")
-  .setHandleInvalid("keep")
+  .setHandleInvalid("keep") //can be changed to "skip" in case neccessary
 
 // COMMAND ----------
 
@@ -93,7 +109,7 @@ val dummyOneHotEncoded = new OneHotEncoderEstimator()
 
 // COMMAND ----------
 
-// DBTITLE 1,Get an Array of all column names (for vectorAssembler)
+// DBTITLE 1,Get an Array of all relevant columns for training (this is for VectorAssembler)
 // note - added manipulated column as well.
 val relevantModelColumns = (trainingData.drop("label", "dummyString").columns) ++  Array("dummyString_oneHotEncoded")
 
@@ -110,7 +126,7 @@ val assembler = new VectorAssembler()
 // DBTITLE 1,XGBoost Regressor (with objective reg:linear) instantiation, as it's a regression task. Note: missing flag = -99.0
 val xgboostRegressor = new XGBoostRegressor(Map[String, Any](
   "num_round" -> 80,
-  "missing" -> -99.0,
+  "missing" -> -99.0, //As we do have missing values in the dataset!
   "num_workers" -> 5,  //Distributed training
   "objective" -> "reg:linear",
   "eta" -> 0.1, // learning rate
@@ -126,10 +142,10 @@ val xgboostRegressor = new XGBoostRegressor(Map[String, Any](
 
 // DBTITLE 1,Create Pipeline of phases - 1. StringIndexer, 2. OneHotEncoding, 3. VectorAssembler, 4. XGBoostRegressor
 val pipeline = new Pipeline()
-      .setStages(Array(dummyIndexer, 
-                       dummyOneHotEncoded,
-                       assembler, 
-                       xgboostRegressor))
+                      .setStages(Array(dummyIndexer,
+                                       dummyOneHotEncoded,
+                                       assembler,
+                                       xgboostRegressor))
 
 // COMMAND ----------
 
@@ -151,14 +167,7 @@ val updatedDfTrainedAfterModel = trainedModel.transform(trainingData)
 
 // COMMAND ----------
 
-// DBTITLE 1,Save Model
-// Save model
-import ml.combust.bundle.BundleFile
-import ml.combust.mleap.spark.SparkSupport._
-import org.apache.spark.ml.bundle.SparkBundleContext
-import ml.combust.mleap.runtime.MleapSupport._
-import resource._
-
+// DBTITLE 1,Save Model (preparation)
 implicit val context = SparkBundleContext().withDataset(updatedDfTrainedAfterModel)
 
 // COMMAND ----------
@@ -231,7 +240,7 @@ val eval = evaluator.evaluate(updatedAfterModel)
 
 // COMMAND ----------
 
-// DBTITLE 1,Feature Importance
+// DBTITLE 1,Feature Importance #1
 // Feature importance is not that easy in XGBoost4J (the Spark version)
 // In order to get it, one should dive into the low-level APIs of the model, and get the relevant method out of it, then join the scores with the column names
 
@@ -253,6 +262,7 @@ val filteredFeatureScore = featureScoreDf
 
 // COMMAND ----------
 
+// DBTITLE 1,Feature Importance #2
 // create a list of all relevant features 
 val listOfColsForFeatureImportance = updatedAfterModel.drop("label",
                                "dummyString",
@@ -260,9 +270,6 @@ val listOfColsForFeatureImportance = updatedAfterModel.drop("label",
                                "features",
                                "prediction").columns.toSeq
 
-// COMMAND ----------
-
-//val map = Map(listOfColsForFeatureImportance map { a => a.key -> a }: _*)
 val mapOfCols = listOfColsForFeatureImportance.map(t => t.toString() -> ("f"))
 var colsFinalMap = scala.collection.mutable.Map[String, String]()
 
@@ -275,6 +282,7 @@ for ((k,v) <- mapOfCols){
 
 // COMMAND ----------
 
+// DBTITLE 1,Feature Importance #3
 val scoredDfFeatures = filteredFeatureScore.sort("feature")
 scoredDfFeatures.createOrReplaceTempView("scoreDf")
 
@@ -284,6 +292,7 @@ mapDf.createOrReplaceTempView("mapDf")
 
 // COMMAND ----------
 
+// DBTITLE 1,Feature Importance #4 (with Information Gain)
 // MAGIC %sql
 // MAGIC SELECT a.Feature, b.score 
 // MAGIC FROM
