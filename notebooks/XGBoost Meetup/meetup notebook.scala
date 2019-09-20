@@ -233,10 +233,10 @@ val eval = evaluator.evaluate(updatedAfterModel)
 // MAGIC %sql
 // MAGIC SELECT * FROM updatedAfterModel
 // MAGIC -- features
-// MAGIC -- 0: 1 - this is the first index that says it is a Dense Representation (more non-zero than zero elements - done automatically by spark); 0 - Sparse Representation
-// MAGIC -- 1: 13 - this is the size of the feature vector row
+// MAGIC -- 0: this is the first index that says it is a Dense Representation (more non-zero than zero elements - done automatically by spark); 0 - Sparse Representation
+// MAGIC -- 1: this is the size of the feature vector row
 // MAGIC -- 2: The indices of the Sparse representation - meaning which features are non-zero in a Sparse representation (thus will always be empty in Dense repersentation)
-// MAGIC -- 3: the actual values
+// MAGIC -- 3: the actual values of the indices that were found in 2
 
 // COMMAND ----------
 
@@ -247,7 +247,7 @@ val eval = evaluator.evaluate(updatedAfterModel)
 // getting the low-level API of xgboostRegressionModel in order to get the features and feature scores
 
 // 1. get the model out of it
-val model = trainedModel.stages(3).asInstanceOf[ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel]
+val model = trainedModel.stages(trainedModel.stages.size -1).asInstanceOf[ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel]
 
 // 2. get the nativeBooster in order to call the feature score getter
 val modelNativeForFeatureImportance = model.nativeBooster
@@ -256,9 +256,6 @@ val modelNativeForFeatureImportance = model.nativeBooster
 val featureScore = modelNativeForFeatureImportance.getFeatureScore()
 
 val featureScoreDf = featureScore.toSeq.toDF("feature", "score")
-
-// a lot of features are derived from a sparse vector, therefore not that helping the model, but are essential to it.
-val filteredFeatureScore = featureScoreDf
 
 // COMMAND ----------
 
@@ -283,7 +280,7 @@ for ((k,v) <- mapOfCols){
 // COMMAND ----------
 
 // DBTITLE 1,Feature Importance #3
-val scoredDfFeatures = filteredFeatureScore.sort("feature")
+val scoredDfFeatures = featureScoreDf.sort("feature")
 scoredDfFeatures.createOrReplaceTempView("scoreDf")
 
 val mapDf = colsFinalMap.toSeq.toDF("Feature", "FeatureID")
