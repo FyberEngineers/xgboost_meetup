@@ -1,11 +1,12 @@
 // Databricks notebook source
-// importing relevant libs & functions
+// DBTITLE 1,Importing relevant libraries & functions
 // ML imports
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.feature.OneHotEncoderEstimator
 import org.apache.spark.ml.feature.VectorAssembler
 import ml.dmlc.xgboost4j.scala.spark.XGBoostRegressor
 import org.apache.spark.ml.Pipeline
+
 // used for model evaluation
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 
