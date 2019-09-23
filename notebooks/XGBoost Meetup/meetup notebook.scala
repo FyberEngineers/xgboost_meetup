@@ -24,7 +24,7 @@ import resource._
 
 // COMMAND ----------
 
-// load data
+// DBTITLE 1,Data Loading (Note: It's saved on our S3, but available online, e.g.: https://www.kaggle.com/c/boston-housing)
 val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/daniel/meetup-data/")
 
 // COMMAND ----------
