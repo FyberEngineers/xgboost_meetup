@@ -24,7 +24,7 @@ import resource._
 
 // COMMAND ----------
 
-// load data (features only)
+// load data
 val boston_housing_dataset = spark.read.load("/mnt/S3/prod-parquet/product/daniel/meetup-data/")
 
 // COMMAND ----------
@@ -99,7 +99,6 @@ val Array(trainingData, testData) = replacedValuesDf.withColumnRenamed("PRICE", 
 val dummyIndexer = new StringIndexer()
   .setInputCol("dummyString")
   .setOutputCol("dummyString_indexed")
-  .setHandleInvalid("keep") //can be changed to "skip" in case neccessary
 
 // COMMAND ----------
 
@@ -156,7 +155,7 @@ val trainedModel = pipeline.fit(trainingData)
 // COMMAND ----------
 
 // DBTITLE 1,Model Saving using MLeap (https://mleap-docs.combust.ml/getting-started/spark.html)
-// this transform is solely for model saving - not used for evaluation !
+// this transform is solely for model saving - not used for evaluation!
 val updatedDfTrainedAfterModel = trainedModel.transform(trainingData)
 
 // COMMAND ----------
@@ -234,7 +233,7 @@ val eval = evaluator.evaluate(updatedAfterModel)
 // MAGIC %sql
 // MAGIC SELECT * FROM updatedAfterModel
 // MAGIC -- features
-// MAGIC -- 0: this is the first index that says it is a Dense Representation (more non-zero than zero elements - done automatically by spark); 0 - Sparse Representation
+// MAGIC -- 0: this is the first index that says it is: 1 - a Dense Representation (more non-zero than zero elements - done automatically by spark); 0 - Sparse Representation
 // MAGIC -- 1: this is the size of the feature vector row
 // MAGIC -- 2: The indices of the Sparse representation - meaning which features are non-zero in a Sparse representation (thus will always be empty in Dense repersentation)
 // MAGIC -- 3: the actual values of the indices that were found in 2
@@ -246,7 +245,6 @@ val eval = evaluator.evaluate(updatedAfterModel)
 // In order to get it, one should dive into the low-level APIs of the model, and get the relevant method out of it, then join the scores with the column names
 
 // getting the low-level API of xgboostRegressionModel in order to get the features and feature scores
-
 // 1. get the model out of it
 val model = trainedModel.stages(trainedModel.stages.size -1).asInstanceOf[ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel]
 
@@ -257,6 +255,10 @@ val modelNativeForFeatureImportance = model.nativeBooster
 val featureScore = modelNativeForFeatureImportance.getFeatureScore()
 
 val featureScoreDf = featureScore.toSeq.toDF("feature", "score")
+
+// COMMAND ----------
+
+display(featureScoreDf)
 
 // COMMAND ----------
 
